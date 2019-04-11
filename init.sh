@@ -68,14 +68,14 @@ iptables -t nat -A CLASH_TCP -d 240.0.0.0/4 -j RETURN
 # 过滤 VPS ip地址
 unset server_addrs && \
 for server in "${proxy_server[@]}"; do
-    if [ $(grep -Ec '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' <<< "$server") -eq 0 ]; then
-        server_addr="$(getent hosts $server | cut -d' ' -f1)"
-        server_addrs+=($server_addr)
-        if [ -n "$(cat /etc/hosts | grep $server)" ];then 
-          echo "$(sed "/${server}/d" /etc/hosts)" > /etc/hosts
-        fi
-        echo "${server_addr} ${server}" >> /etc/hosts
+  if [ $(grep -Ec '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' <<< "$server") -eq 0 ]; then
+    server_addr="$(getent hosts $server | cut -d' ' -f1)"
+    server_addrs+=($server_addr)
+    if [ -n "$(cat /etc/hosts | grep $server)" ];then 
+      echo "$(sed "/${server}/d" /etc/hosts)" > /etc/hosts
     fi
+    echo "${server_addr} ${server}" >> /etc/hosts
+  fi
 done; \
 for server in "${server_addrs[@]}"; do
   iptables -t nat -A CLASH_TCP -d $server -j RETURN
@@ -94,6 +94,15 @@ echo "$(date +%Y-%m-%d\ %T) Starting clash.."
 
 function stop {
   echo "nameserver 114.114.114.114" > /etc/resolv.conf
+  # 清理 /etc/hosts
+  unset server_addrs && \
+  for server in "${proxy_server[@]}"; do
+    if [ $(grep -Ec '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' <<< "$server") -eq 0 ]; then
+      if [ -n "$(cat /etc/hosts | grep $server)" ];then 
+        echo "$(sed "/${server}/d" /etc/hosts)" > /etc/hosts
+      fi
+    fi
+  done; \
   echo "$(date +%Y-%m-%d\ %T) Clear iptables.."
   for intranet in "${ipts_intranet[@]}"; do
     iptables -t nat -D PREROUTING -s $intranet -p tcp -j CLASH_TCP &>/dev/null
