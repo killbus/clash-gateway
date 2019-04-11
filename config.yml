@@ -14,7 +14,7 @@ mode: Rule
 
 # set log level to stdout (default is info)
 # info / warning / error / debug / silent
-log-level: info
+log-level: warning
 
 # A RESTful API for clash
 external-controller: 0.0.0.0:9090
@@ -50,7 +50,7 @@ Proxy:
 #- { name: "vmess", type: vmess, server: server, port: 443, uuid: uuid, alterId: 32, cipher: auto, network: ws, ws-path: /path, ws-headers: { Host: v2ray.com } }
 # with ws + tls
 - { name: "vmess-ws-tls1", type: vmess, server: server, port: 443, uuid: uuid, alterId: 32, cipher: auto, network: ws, ws-path: /path, tls: true }
-- { name: "vmess-ws-tls2", type: vmess, server: server, port: 443, uuid: uuid, alterId: 32, cipher: auto, network: ws, ws-path: /path, tls: true }
+# - { name: "vmess-ws-tls2", type: vmess, server: server, port: 443, uuid: uuid, alterId: 32, cipher: auto, network: ws, ws-path: /path, tls: true }
 # socks5
 #- { name: "socks", type: socks5, server: server, port: 443 }
 # socks5 with authentication
@@ -71,7 +71,7 @@ Proxy:
 
 Proxy Group:
 # url-test select which proxy will be used by benchmarking speed to a URL.
-- { name: "auto", type: url-test, proxies: ["vmess-ws-tls1", "vmess-ws-tls1"], url: "http://www.gstatic.com/generate_204", interval: 300 }
+- { name: "auto", type: url-test, proxies: ["vmess-ws-tls1"], url: "http://www.gstatic.com/generate_204", interval: 300 }
 
 # fallback select an available policy by priority. The availability is tested by accessing an URL, just like an auto url-test group.
 #- { name: "fallback-auto", type: fallback, proxies: ["ss1", "ss2", "vmess1"], url: "http://www.gstatic.com/generate_204", interval: 300 }

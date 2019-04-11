@@ -2,13 +2,6 @@
 
 CONFIG_PATH='/etc/clash-gateway'
 
-if [ -f "${CONFIG_PATH}/cg.conf" ]; then
-  source "${CONFIG_PATH}/cg.conf"
-else
-  echo "[ERR] No clash gateway config: ${CONFIG_PATH}/cg.conf"  1>&2; \
-  exit 1;
-fi; \
-
 function check_env {
   if [ ! -f /clash -o ! -f /sample_config/cg.conf -o ! -f /sample_config/config.yml ]; then
     /update.sh || echo "[ERR] Can't update, please check networking or update the container. "
@@ -42,6 +35,7 @@ function check_config {
   if [ ! -f "${CONFIG_PATH}/Country.mmdb" ]; then
     update_mmdb
   fi
+  source "${CONFIG_PATH}/cg.conf"
   return 0
 }
 
@@ -90,6 +84,9 @@ echo "nameserver 127.0.0.1" > /etc/resolv.conf
 
 echo "$(date +%Y-%m-%d\ %T) Starting clash.."
 /clash -d /etc/clash-gateway/ &> /var/log/clash.log &
+
+echo -e "IPv4 gateway & dns server: \n`ip addr show eth0 |grep 'inet ' | awk '{print $2}' |sed 's/\/.*//g'`" && \
+echo -e "IPv6 dns server: \n`ip addr show eth0 |grep 'inet6 ' | awk '{print $2}' |sed 's/\/.*//g'`" 
 }
 
 function stop {
@@ -112,13 +109,15 @@ function stop {
   iptables -t nat -X CLASH_TCP
 
   echo "$(date +%Y-%m-%d\ %T) Stoping clash.."
-  killall clash &>/dev/null
+  killall clash &>/dev/null; \
+  return 0
 }
 
+check_env && check_config && \
 case $1 in
-    start)              check_env && check_config && start;;
-    stop)               stop;;
-    daemon)             check_env && check_config && start && tail -f /var/log/clash.log;;
-    update-mmdb)        update;;
-    *)                  stop && check_env && check_config && start;;
+    start)         start;;
+    stop)          stop;;
+    daemon)        start && tail -f /var/log/clash.log;;
+    update-mmdb)   update;;
+    *)             stop && start;;
 esac
