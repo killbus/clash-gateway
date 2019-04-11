@@ -23,8 +23,8 @@ function update_clash {
     echo "Latest clash version: ${clash_current_ver}, need to update" && \
     rm -fr /clash && \
     wget $clash_url -O /clash-linux.tar.gz && \
-    tar zxf /clash-linux.tar.gz && rm /clash-linux.tar.gz && \
-    mv "/clash-linux-${arch}" /clash
+    tar zxf /clash-linux.tar.gz && rm -fr /clash-linux.tar.gz && \
+    mv "/clash-linux-${arch}" /clash && chmod +x /clash
   else
     echo "Current clash version: ${clash_current_ver}, need NOT to update"
   fi
@@ -39,7 +39,7 @@ function update_sample_file {
 
 function check_version {
   rm -rf /tmp/* && \
-  echo "Update time: $(date +%Y-%m-%d\ %T)" > /versions && \
+  echo "Update time: $(date +%Y-%m-%d\ %T)" > /version && \
   echo "clash version: $(/clash -v | cut -d' ' -f2 | cut -d- -f1)" | tee -a /version && \
   echo "Update completed !!"
 }

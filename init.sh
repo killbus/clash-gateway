@@ -10,10 +10,17 @@ else
 fi; \
 
 function check_env {
-  if [ ! -f /clash-o ! -f /sample_config/cg.conf -o ! -f /sample_config/config.yml ]; then
+  if [ ! -f /clash -o ! -f /sample_config/cg.conf -o ! -f /sample_config/config.yml ]; then
     /update.sh || echo "[ERR] Can't update, please check networking or update the container. "
   fi; \
   return 0
+}
+
+function update_mmdb {
+  echo "$(date +%Y-%m-%d\ %T) Updating MMDB.." && \
+  wget http://geolite.maxmind.com/download/geoip/database/GeoLite2-Country.tar.gz -O /tmp/GeoLite2-Country.tar.gz && \
+  tar zxvf /tmp/GeoLite2-Country.tar.gz -C /tmp && mkdir -p $CONFIG_PATH && \
+  mv /tmp/GeoLite2-Country_*/GeoLite2-Country.mmdb ${CONFIG_PATH}/Country.mmdb && rm -fr /tmp/*
 }
 
 function check_config {
@@ -32,6 +39,9 @@ function check_config {
   if [ "$NEED_EXIT" = "true" ]; then
     exit 1;
   fi; \
+  if [ ! -f "${CONFIG_PATH}/Country.mmdb" ]; then
+    update_mmdb
+  fi
   return 0
 }
 
@@ -55,19 +65,35 @@ iptables -t nat -A CLASH_TCP -d 192.168.0.0/16 -j RETURN
 iptables -t nat -A CLASH_TCP -d 224.0.0.0/4 -j RETURN
 iptables -t nat -A CLASH_TCP -d 240.0.0.0/4 -j RETURN
 
+# 过滤 VPS ip地址
+unset server_addrs && \
+for server in "${proxy_server[@]}"; do
+    if [ $(grep -Ec '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' <<< "$server") -eq 0 ]; then
+        server_addr="$(getent hosts $server | cut -d' ' -f1)"
+        server_addrs+=($server_addr)
+        if [ -n "$(cat /etc/hosts | grep $server)" ];then 
+          echo "$(sed "/${server}/d" /etc/hosts)" > /etc/hosts
+        fi
+        echo "${server_addr} ${server}" >> /etc/hosts
+    fi
+done; \
 for server in "${server_addrs[@]}"; do
   iptables -t nat -A CLASH_TCP -d $server -j RETURN
-done
+done; \
 
 iptables -t nat -A CLASH_TCP -p tcp -j REDIRECT --to-ports $proxy_tcport
 
 # iptables -t nat -A OUTPUT -p tcp -j CLASH_TCP
 # iptables -t nat -I OUTPUT -m owner --uid-owner 0 -j RETURN
+
+echo "nameserver 127.0.0.1" > /etc/resolv.conf
+
 echo "$(date +%Y-%m-%d\ %T) Starting clash.."
 /clash -d /etc/clash-gateway/ &> /var/log/clash.log &
 }
 
 function stop {
+  echo "nameserver 114.114.114.114" > /etc/resolv.conf
   echo "$(date +%Y-%m-%d\ %T) Clear iptables.."
   for intranet in "${ipts_intranet[@]}"; do
     iptables -t nat -D PREROUTING -s $intranet -p tcp -j CLASH_TCP &>/dev/null
@@ -75,19 +101,15 @@ function stop {
   # iptables -t nat -D OUTPUT  -p tcp -j CLASH_TCP &>/dev/null
   iptables -t nat -F CLASH_TCP
   iptables -t nat -X CLASH_TCP
+
   echo "$(date +%Y-%m-%d\ %T) Stoping clash.."
   killall clash &>/dev/null
 }
 
-for server in "${proxy_server[@]}"; do
-    if [ $(grep -Ec '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' <<< "$server") -eq 0 ]; then
-        server_addrs+="$(ping -nq -c1 -t1 -W1 $server | head -n1 | awk -F'[()]' '{print $2}') "
-    fi
-done; \
-
 case $1 in
-    start)              check_env; check_config && start;;
+    start)              check_env && check_config && start;;
     stop)               stop;;
-    daemon)             stop; check_env; check_config && start; tail -f /var/log/clash.log;;
-    *)                  stop; check_env; check_config && start;;
+    daemon)             check_env && check_config && start && tail -f /var/log/clash.log;;
+    update-mmdb)        update;;
+    *)                  stop && check_env && check_config && start;;
 esac
