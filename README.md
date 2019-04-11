@@ -12,11 +12,11 @@ wget -p ~/.docker/clash-gateway https://raw.githubusercontent.com/lisaac/clash-g
 # 下载 cg.conf
 wget -p ~/.docker/clash-gateway https://raw.githubusercontent.com/lisaac/clash-gateway/master/cg.conf
 
-################## 配置 clash.yml ##################
-vi ~/.docker/clash-gateway/clash.yml
+################## 配置 clash ##################
+vi ~/.docker/clash-gateway/config.yml
 
 ################## 配置 cg.conf ##################
-vi ~/.docker/clash-gateway/clash.yml
+vi ~/.docker/clash-gateway/cg.conf
 
 # 创建docker network
 docker network create -d macvlan \
