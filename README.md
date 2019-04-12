@@ -30,7 +30,7 @@ docker network create -d macvlan \
 docker pull lisaac/clash-gateway:`uname -m`
 
 # 运行容器
-docker run -d --name clash-gatewayt \
+docker run -d --name clash-gateway \
     --network dMACvLAN --ip 10.1.1.244 \
     --privileged \
     --restart unless-stopped \

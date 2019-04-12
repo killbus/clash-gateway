@@ -71,7 +71,7 @@ for server in "${proxy_server[@]}"; do
     echo "${server_addr} ${server}" >> /etc/hosts
   fi
 done; \
-for server in "${server_addrs[@]}"; do
+for server in "${proxy_server[@]}"; do
   iptables -t nat -A CLASH_TCP -d $server -j RETURN
 done; \
 
