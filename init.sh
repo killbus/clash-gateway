@@ -39,15 +39,25 @@ function check_config {
   return 0
 }
 
+function check_snat_rule {
+  if [ "$ipts_non_snat" != 'true' ]; then
+    if ! iptables -t nat -C POSTROUTING -s $intranet ! -d $intranet -j MASQUERADE &>/dev/null; then
+        iptables -t nat -A POSTROUTING -s $intranet ! -d $intranet -j MASQUERADE
+    fi
+  fi
+}
+
 function start {
 sysctl -w net.ipv4.ip_forward=1 &>/dev/null
 for dir in $(ls /proc/sys/net/ipv4/conf); do
     sysctl -w net.ipv4.conf.$dir.send_redirects=0 &>/dev/null
 done
+
 echo "$(date +%Y-%m-%d\ %T) Setting iptables.."
 iptables -t nat -N CLASH_TCP
 for intranet in "${ipts_intranet[@]}"; do
   iptables -t nat -A PREROUTING -s $intranet -p tcp -j CLASH_TCP
+  check_snat_rule
 done
 
 iptables -t nat -A CLASH_TCP -d 0.0.0.0/8 -j RETURN
