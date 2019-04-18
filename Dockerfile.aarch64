@@ -3,7 +3,7 @@ FROM multiarch/alpine:aarch64-edge
 ENV TZ=Asia/Shanghai
 
 RUN apk --no-cache --no-progress upgrade && \
-    apk --no-cache --no-progress add iptables bash ca-certificates curl && \
+    apk --no-cache --no-progress add iptables bash ca-certificates tzdata curl && \
     mkdir -p /sample_config && mkdir -p /etc/clash-gateway && \
     ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 

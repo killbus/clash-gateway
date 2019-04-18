@@ -2,7 +2,7 @@
 
 function update_system {
   apk --no-cache --no-progress upgrade && \
-  apk --no-cache --no-progress add iptables bash ca-certificates curl
+  apk --no-cache --no-progress add iptables bash ca-certificates tzdata curl
 }
 
 # update clash
