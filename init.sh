@@ -4,7 +4,7 @@ CONFIG_PATH='/etc/clash-gateway'
 
 function check_env {
   if [ ! -f /clash -o ! -f /sample_config/cg.conf -o ! -f /sample_config/config.yml ]; then
-    /update.sh || echo "[ERR] Can't update, please check networking or update the container. "
+    /update.sh  && { exec $0 "$@"; exit 0; } ||{ echo "[ERR] Can't update, please check networking or update the container. "; return 1; }
   fi; \
   return 0
 }
@@ -41,35 +41,30 @@ function check_config {
 
 function check_snat_rule {
   if [ "$ipts_non_snat" != 'true' ]; then
-    if ! iptables -t nat -C POSTROUTING -s $intranet ! -d $intranet -j MASQUERADE &>/dev/null; then
-        iptables -t nat -A POSTROUTING -s $intranet ! -d $intranet -j MASQUERADE
+    if ! iptables -t nat -C CLASH_TCP_POST -s $intranet ! -d $intranet -j MASQUERADE &>/dev/null; then
+      iptables -t nat -A CLASH_TCP_POST -s $intranet ! -d $intranet -j MASQUERADE
     fi
   fi
 }
 
-function start {
-sysctl -w net.ipv4.ip_forward=1 &>/dev/null
-for dir in $(ls /proc/sys/net/ipv4/conf); do
-    sysctl -w net.ipv4.conf.$dir.send_redirects=0 &>/dev/null
-done
-
+function start_iptables {
 echo "$(date +%Y-%m-%d\ %T) Setting iptables.."
-iptables -t nat -N CLASH_TCP
+# 建立自定义chian
+iptables -t nat -N CLASH_TCP_PRE
+iptables -t nat -N CLASH_TCP_POST
+iptables -t nat -N CLASH_TCP_OUT
+# tcp 包转入自定义 chian
 for intranet in "${ipts_intranet[@]}"; do
-  iptables -t nat -A PREROUTING -s $intranet -p tcp -j CLASH_TCP
+  iptables -t nat -A PREROUTING -s $intranet -p tcp -j CLASH_TCP_PRE
+  iptables -t nat -A POSTROUTING -s $intranet -p tcp -j CLASH_TCP_POST
+  iptables -t nat -A OUTPUT -s $intranet -p tcp -j CLASH_TCP_OUT
+# 内网地址 return
+  iptables -t nat -A CLASH_TCP_PRE -d $intranet -j RETURN
   check_snat_rule
 done
+  iptables -t nat -A CLASH_TCP_PRE -d 0.0.0.0/8 -j RETURN
 
-iptables -t nat -A CLASH_TCP -d 0.0.0.0/8 -j RETURN
-iptables -t nat -A CLASH_TCP -d 127.0.0.0/8 -j RETURN
-iptables -t nat -A CLASH_TCP -d 10.0.0.0/8 -j RETURN
-iptables -t nat -A CLASH_TCP -d 169.254.0.0/16 -j RETURN
-iptables -t nat -A CLASH_TCP -d 172.16.0.0/12 -j RETURN
-iptables -t nat -A CLASH_TCP -d 192.168.0.0/16 -j RETURN
-iptables -t nat -A CLASH_TCP -d 224.0.0.0/4 -j RETURN
-iptables -t nat -A CLASH_TCP -d 240.0.0.0/4 -j RETURN
-
-# 过滤 VPS ip地址
+# 解析 server 地址
 unset server_addrs && \
 for server in "${proxy_server[@]}"; do
   if [ $(grep -Ec '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' <<< "$server") -eq 0 ]; then
@@ -81,19 +76,57 @@ for server in "${proxy_server[@]}"; do
     echo "${server_addr} ${server}" >> /etc/hosts
   fi
 done; \
+# 过滤 VPS ip地址
 for server in "${proxy_server[@]}"; do
-  iptables -t nat -A CLASH_TCP -d $server -j RETURN
+  iptables -t nat -A CLASH_TCP_PRE -d $server -j RETURN
 done; \
 
-iptables -t nat -A CLASH_TCP -p tcp -j REDIRECT --to-ports $proxy_tcport
+iptables -t nat -A CLASH_TCP_PRE -p tcp -j REDIRECT --to-ports $proxy_tcport
+}
 
-# iptables -t nat -A OUTPUT -p tcp -j CLASH_TCP
-# iptables -t nat -I OUTPUT -m owner --uid-owner 0 -j RETURN
+function flush_iptables {
+  echo "$(date +%Y-%m-%d\ %T) flush iptables.."
+  for intranet in "${ipts_intranet[@]}"; do
+    iptables -t nat -D PREROUTING -s $intranet -p tcp -j CLASH_TCP_PRE &>/dev/null
+    iptables -t nat -D POSTROUTING -s $intranet -p tcp -j CLASH_TCP_POST &>/dev/null
+    iptables -t nat -D OUTPUT -s $intranet -p tcp -j CLASH_TCP_OUT &>/dev/null
+  done
+  # iptables -t nat -D OUTPUT  -p tcp -j CLASH_TCP_PRE &>/dev/null
+  iptables -t nat -F CLASH_TCP_PRE
+  iptables -t nat -X CLASH_TCP_PRE
+  iptables -t nat -F CLASH_TCP_POST
+  iptables -t nat -X CLASH_TCP_POST
+  iptables -t nat -F CLASH_TCP_OUT
+  iptables -t nat -X CLASH_TCP_OUT
+}
+
+
+function start_koolproxy {
+  echo  "$(date +%Y-%m-%d\ %T) Starting koolproxy.."
+  if [ "$ad_filter" = 'kp' ]; then
+    mkdir -p ${CONFIG_PATH}/koolproxydata
+    chown -R daemon:daemon ${CONFIG_PATH}/koolproxydata
+    su -s/bin/sh -c'/koolproxy/koolproxy -d -l2 -p65080 -b/etc/ss-tproxy/koolproxydata' daemon
+    iptables -t nat -I CLASH_TCP_OUT -m owner ! --uid-owner daemon -p tcp -m multiport --dports 80,443 -j REDIRECT --to-ports 65080
+    for intranet in "${ipts_intranet[@]}"; do
+      iptables -t nat -I CLASH_TCP_PRE -s $intranet ! -d $intranet -p tcp -m multiport --dports 80,443 -j REDIRECT --to-ports 65080
+    done
+  fi
+}
+
+function start {
+sysctl -w net.ipv4.ip_forward=1 &>/dev/null
+for dir in $(ls /proc/sys/net/ipv4/conf); do
+    sysctl -w net.ipv4.conf.$dir.send_redirects=0 &>/dev/null
+done
+
+start_iptables
 
 echo "nameserver 127.0.0.1" > /etc/resolv.conf
-
 echo "$(date +%Y-%m-%d\ %T) Starting clash.."
 /clash -d /etc/clash-gateway/ &> /var/log/clash.log &
+
+[ "$ad_filter" = 'kp' ] && start_koolproxy
 
 echo -e "IPv4 gateway & dns server: \n`ip addr show eth0 |grep 'inet ' | awk '{print $2}' |sed 's/\/.*//g'`" && \
 echo -e "IPv6 dns server: \n`ip addr show eth0 |grep 'inet6 ' | awk '{print $2}' |sed 's/\/.*//g'`" 
@@ -110,16 +143,12 @@ function stop {
       fi
     fi
   done; \
-  echo "$(date +%Y-%m-%d\ %T) Clear iptables.."
-  for intranet in "${ipts_intranet[@]}"; do
-    iptables -t nat -D PREROUTING -s $intranet -p tcp -j CLASH_TCP &>/dev/null
-  done
-  # iptables -t nat -D OUTPUT  -p tcp -j CLASH_TCP &>/dev/null
-  iptables -t nat -F CLASH_TCP
-  iptables -t nat -X CLASH_TCP
+
+flush_iptables
 
   echo "$(date +%Y-%m-%d\ %T) Stoping clash.."
   killall clash &>/dev/null; \
+  killall koolproxy &>/dev/null; \
   return 0
 }
 
