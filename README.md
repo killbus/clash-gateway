@@ -10,10 +10,10 @@
 mkdir -p ~/.docker/clash-gateway
 
 # 下载 clash 配置文件模版
-wget https://raw.githubusercontent.com/lisaac/clash-gateway/master/config.yml -O ~/.docker/clash-gateway/clash-gateway/config.yml
+wget https://raw.githubusercontent.com/lisaac/clash-gateway/master/config.yml -O ~/.docker/clash-gateway/config.yml
 
 # 下载 cg.conf
-wget https://raw.githubusercontent.com/lisaac/clash-gateway/master/cg.conf -O ~/.docker/clash-gateway/clash-gateway/cg.conf 
+wget https://raw.githubusercontent.com/lisaac/clash-gateway/master/cg.conf -O ~/.docker/clash-gateway/cg.conf 
 
 ################## 配置 clash ##################
 vi ~/.docker/clash-gateway/config.yml
